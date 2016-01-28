@@ -124,6 +124,7 @@ int gpu_threads;
 bool opt_scrypt;
 #endif
 bool opt_blake256;
+bool opt_vanillacoin;
 #endif
 bool opt_restart = true;
 bool opt_nogpu;
@@ -913,6 +914,14 @@ static char *enable_debug(bool *flag)
 	return NULL;
 }
 
+static char *set_vanillacoin_mode(bool *flag)
+{
+	*flag = true;
+	/* Turn on blake256 algo, too. */
+	opt_blake256 = true;
+	return NULL;
+}
+
 static char *set_schedtime(const char *arg, struct schedtime *st)
 {
 	if (sscanf(arg, "%d:%d", &st->tm.tm_hour, &st->tm.tm_min) != 2)
@@ -1399,6 +1408,9 @@ static struct opt_table opt_config_table[] = {
 	OPT_WITHOUT_ARG("--blake256",
 			opt_set_bool, &opt_blake256,
 			"Use the blake256 algorithm for mining"),
+	OPT_WITHOUT_ARG("--vanillacoin",
+			set_vanillacoin_mode, &opt_vanillacoin,
+			"Use the blake256 algorithm for vanillacoin mining"),
 	OPT_WITH_ARG("--sharelog",
 		     set_sharelog, NULL, NULL,
 		     "Append share log to file"),
@@ -1847,7 +1859,10 @@ static unsigned char *__gbt_merkleroot(struct pool *pool)
 	if (unlikely(!merkle_hash))
 		quit(1, "Failed to calloc merkle_hash in __gbt_merkleroot");
 
-	gen_hash(pool->coinbase, merkle_hash, pool->coinbase_len);
+	if (opt_vanillacoin)
+		gen_hashd(pool->coinbase, merkle_hash, pool->coinbase_len);
+	else
+		gen_hash(pool->coinbase, merkle_hash, pool->coinbase_len);
 
 	if (pool->gbt_txns)
 		memcpy(merkle_hash + 32, pool->txn_hashes, pool->gbt_txns * 32);
@@ -6080,7 +6095,10 @@ static void gen_stratum_work(struct pool *pool, struct work *work)
 	cg_dwlock(&pool->data_lock);
 
 	/* Generate merkle root */
-	gen_hash(pool->coinbase, merkle_root, pool->swork.cb_len);
+	if (opt_vanillacoin)
+		gen_hashd(pool->coinbase, merkle_root, pool->swork.cb_len);
+	else
+		gen_hash(pool->coinbase, merkle_root, pool->swork.cb_len);
 	memcpy(merkle_sha, merkle_root, 32);
 	for (i = 0; i < pool->swork.merkles; i++) {
 		memcpy(merkle_sha + 32, pool->swork.merkle_bin[i], 32);
